@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Secure PRNG — Current Minute Value</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{font-family:system-ui,Arial;margin:20px;background:#f8fafc;color:#111}
+    .card{background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.06);max-width:760px;margin:auto}
+    .clock{font-size:28px;font-weight:600}
+    .big{font-size:64px;font-weight:800;margin:6px 0}
+    .meta{color:#666;font-size:13px}
+    .history{margin-top:14px;border-top:1px dashed #eee;padding-top:12px}
+    .row{display:flex;gap:12px;align-items:center}
+    @media (max-width:600px){ .row{flex-direction:column;align-items:flex-start} .big{font-size:48px} }
+    .warn{color:#a33;margin-top:10px;font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="meta" id="servertime">Server time: —</div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div class="meta">Current minute</div>
+        <div class="big" id="value">—</div>
+        <div class="meta" id="label">—</div>
+      </div>
+    </div>
+
+    <div class="history">
+      <strong>Recent history</strong>
+      <div id="histlist"></div>
+    </div>
+
+    <div class="warn">
+      Note: This server provides cryptographically-secure random digits for each minute. It deliberately does <strong>not</strong> reveal future values.
+    </div>
+  </div>
+
+<script>
+  const clockEl = document.getElementById('clock');
+  const valueEl = document.getElementById('value');
+  const labelEl = document.getElementById('label');
+  const histEl = document.getElementById('histlist');
+  const serverTimeEl = document.getElementById('servertime');
+
+  // update local clock every 250ms
+  setInterval(()=> {
+    const now = new Date();
+    const pad=(n)=>String(n).padStart(2,'0');
+    clockEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }, 250);
+
+  async function fetchCurrent() {
+    try {
+      const r = await fetch('/api/current', {cache:'no-store'});
+      if(!r.ok) throw new Error('Network');
+      const j = await r.json();
+      valueEl.textContent = j.value === null ? '—' : j.value;
+      labelEl.textContent = j.minuteLabel || '—';
+      serverTimeEl.textContent = `Server time: ${j.serverTime || '—'}`;
+    } catch (e) {
+      serverTimeEl.textContent = 'Server unreachable';
+    }
+  }
+
+  async function fetchHistory() {
+    try {
+      const r = await fetch('/api/history?limit=20', {cache:'no-store'});
+      if(!r.ok) throw new Error('Network');
+      const arr = await r.json();
+      histEl.innerHTML = arr.map(it => `<div style="padding:6px 0;border-bottom:1px dotted #eee">
+        <div style="font-size:13px;color:#666">${it.timestampISO} — ${it.minuteLabel}</div>
+        <div style="font-size:20px;font-weight:700">${it.value}</div>
+      </div>`).join('');
+    } catch (e) {
+      histEl.innerHTML = '<div>History unavailable</div>';
+    }
+  }
+
+  // initial fetch and periodic polling
+  fetchCurrent(); fetchHistory();
+  setInterval(fetchCurrent, 1000);     // poll current every 1s for UI freshness
+  setInterval(fetchHistory, 10*1000);  // update history every 10s
+</script>
+</body>
+</html>
